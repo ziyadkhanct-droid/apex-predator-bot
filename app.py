@@ -362,20 +362,11 @@ def load_config():
         with open("config.json", "r") as f:
             try: return json.load(f)
             except: pass
-    return {"bot_token": "", "chat_id": "", "api_key": "", "api_secret": ""}
+    return {"api_key": "", "api_secret": ""}
 
-def save_config(bot_token, chat_id, api_key, api_secret):
-    with open("config.json", "w") as f: json.dump({"bot_token": bot_token, "chat_id": chat_id, "api_key": api_key, "api_secret": api_secret}, f)
+def save_config(api_key, api_secret):
+    with open("config.json", "w") as f: json.dump({"api_key": api_key, "api_secret": api_secret}, f)
 
-def send_telegram_alert(bot_token, chat_id, message):
-    if not bot_token or not chat_id: return False, "Token atau Chat ID kosong"
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {"chat_id": str(chat_id).strip(), "text": message, "parse_mode": "Markdown"}
-    try:
-        res = requests.post(url, json=payload, timeout=5)
-        return (True, "Berhasil") if res.status_code == 200 else (False, f"Telegram menolak: {res.text}")
-    except Exception as e:
-        return False, f"Koneksi terputus: {str(e)}"
 
 # ================= CCXT BRACKET ORDER ENGINE =================
 def format_ccxt_symbol(symbol):
@@ -507,7 +498,7 @@ def calculate_signals(df):
 
     return signals, latest['Close']
 
-def process_coin_scan(exchange, symbol, tf, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct, bot_token, chat_id):
+def process_coin_scan(exchange, symbol, tf, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct):
     df_scan = fetch_data_from_exchange(exchange, symbol, tf, limit=100)
     if df_scan is None or len(df_scan) < 50: return []
         
@@ -532,9 +523,6 @@ def process_coin_scan(exchange, symbol, tf, tp_mode, sl_pct, tp_pct, tsl_act_pct
             tp_msg = f"*TSL Trigger:* {tsl:.5f}\n*Step Area:* {tsl_step_pct}%"
             
         results.append(res_dict)
-        if bot_token and chat_id:
-            msg = f"🚨 *NEW SIGNAL FOUND* 🚨\n*Bursa:* {exchange}\n*Koin:* {symbol}\n*Strategi:* {strat}\n*Sinyal:* {signal}\n*Entry:* {entry:.5f}\n*SL:* {sl:.5f}\n{tp_msg}"
-            send_telegram_alert(bot_token, chat_id, msg)
     return results
 
 # ================= BACKTESTER =================
@@ -831,13 +819,8 @@ if len(st.session_state.sniper_logs) > 0:
     for log in reversed(st.session_state.sniper_logs[-10:]):  # Display the last 10 logs
         st.sidebar.info(log)
 
-st.sidebar.markdown("### 💬 Telegram Alerts")
-with st.sidebar.expander("⚙️ Telegram Setup", expanded=False):
-    bot_token_input = st.text_input("Bot Token", value=app_config.get("bot_token", ""), type="password")
-    chat_id_input = st.text_input("Chat ID", value=app_config.get("chat_id", ""))
-
-if st.sidebar.button("💾 Simpan Konfigurasi (API & Telegram)", use_container_width=True):
-    save_config(bot_token_input, chat_id_input, api_key_input, api_secret_input)
+if st.sidebar.button("💾 Simpan Konfigurasi API", use_container_width=True):
+    save_config(api_key_input, api_secret_input)
     st.sidebar.success("Konfigurasi Tersimpan!")
 
 st.sidebar.markdown("### 🌐 Global Feed")
@@ -866,7 +849,7 @@ if st.sidebar.button("🚀 EXECUTE MULTI-STRATEGY SCAN", use_container_width=Tru
         temp_results = []
         progress_bar = st.sidebar.progress(0)
         with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
-            futures = {executor.submit(process_coin_scan, t[0], t[1], timeframe, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct, app_config.get("bot_token", ""), app_config.get("chat_id", "")): t for t in target_tasks}
+            futures = {executor.submit(process_coin_scan, t[0], t[1], timeframe, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct): t for t in target_tasks}
             for i, future in enumerate(concurrent.futures.as_completed(futures)):
                 if len(target_tasks) > 0: progress_bar.progress((i + 1) / len(target_tasks))
                 try: 
