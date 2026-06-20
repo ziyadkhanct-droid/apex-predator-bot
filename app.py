@@ -144,6 +144,47 @@ def apply_theme(theme_name):
     elif theme_name == "Ubuntu Linux":
         css += """.stTabs [data-baseweb="tab-list"] { border-bottom: 2px solid #E95420 !important; } .stTabs [data-baseweb="tab"] { background-color: #5E2750 !important; } .stTabs [aria-selected="true"] { background-color: #E95420 !important; } .stTabs [aria-selected="true"] span, .stTabs [aria-selected="true"] p { color: #FFFFFF !important; }"""
 
+    css += """
+    @media (max-width: 768px) {
+        /* Perkecil font global untuk HP */
+        html, body, p, span, div, label {
+            font-size: 14px !important;
+        }
+        
+        /* Perkecil judul dan header */
+        h1 { font-size: 1.5rem !important; }
+        h2 { font-size: 1.2rem !important; }
+        h3 { font-size: 1.1rem !important; }
+
+        /* Metrik (Angka besar) harus dikecilkan agar tidak tertindih */
+        [data-testid="stMetricValue"] {
+            font-size: 1.4rem !important;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 0.8rem !important;
+            white-space: normal !important;
+        }
+
+        /* Tabel / Dataframe HARUS bisa di-scroll ke samping (horizontal scroll) */
+        [data-testid="stDataFrame"] {
+            width: 100% !important;
+            overflow-x: auto !important;
+        }
+
+        /* Buat tombol lebih nyaman ditekan dengan jempol (Touch Target) */
+        .stButton > button {
+            padding: 12px 10px !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+        }
+
+        /* Hilangkan padding berlebih di pinggir layar HP */
+        .stApp {
+            padding: 1rem 0.5rem !important;
+        }
+    }
+    """
+
     css += "\n</style>"
     st.markdown(css, unsafe_allow_html=True)
 
