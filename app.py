@@ -627,8 +627,8 @@ else:
 
 st.sidebar.write("---")
 if st.sidebar.button("🚀 EXECUTE MULTI-STRATEGY SCAN", use_container_width=True, type="primary"):
-    if is_kill_switch_active: st.sidebar.error(f"⚠️ SCAN DIBATALKAN: Auto-Pause aktif! Rilis {active_event_name}")
-    elif not exchanges: st.sidebar.warning("Pilih bursa!")
+    if is_kill_switch_active: st.sidebar.warning(f"📊 Radar: Ada rilis berita {active_event_name} hari ini. Volatilitas tinggi diperkirakan.")
+    if not exchanges: st.sidebar.warning("Pilih bursa!")
     else:
         target_tasks = [(ex, coin) for ex in exchanges for coin in get_top_coins(ex, limit=skala_scanner)]
         temp_results = []
@@ -652,8 +652,8 @@ df_all = pd.DataFrame(st.session_state.scan_results)
 
 def render_strategy_tab(strategy_name):
     st.subheader(f"⚡ Sinyal {strategy_name}")
-    if is_kill_switch_active: st.error(f"⚠️ HIGH VOLATILITY: Radar Paused due to {active_event_name}")
-    elif not df_all.empty and 'Strategi' in df_all.columns:
+    if is_kill_switch_active: st.warning(f"📊 Radar: Ada rilis berita {active_event_name} hari ini. Volatilitas tinggi diperkirakan.")
+    if not df_all.empty and 'Strategi' in df_all.columns:
         sig_data = [row for row in st.session_state.scan_results if row['Strategi'] == strategy_name]
         if not sig_data: st.info("Belum ada sinyal.")
         for data in sig_data: render_signal_card(data, live_mode, api_key_input, api_secret_input, tp_mode)
@@ -664,8 +664,8 @@ with tab4: render_strategy_tab('Volume Breakout')
 
 with tab1:
     st.markdown("## 🏆 Top Conviction Picks")
-    if is_kill_switch_active: st.error(f"⚠️ EKSEKUSI DIHENTIKAN: Rilis {active_event_name}.")
-    elif st.button("🧠 GENERATE PICKS & AUTO-SNIPER", type="primary"):
+    if is_kill_switch_active: st.warning(f"📊 Radar: Ada rilis berita {active_event_name} hari ini. Volatilitas tinggi diperkirakan.")
+    if st.button("🧠 GENERATE PICKS & AUTO-SNIPER", type="primary"):
         if df_all.empty: st.warning("Jalankan Scanner terlebih dahulu.")
         else:
             conviction_list, grouped, prog = [], df_all.groupby(['Exchange', 'Koin']), st.progress(0)
