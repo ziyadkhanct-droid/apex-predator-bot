@@ -471,6 +471,8 @@ def fetch_data_from_exchange(exchange, symbol, tf, limit=100):
 # ================= MULTI-STRATEGY ENGINE =================
 def calculate_signals(df):
     df = df.copy()
+    df['High'] = df['High'].astype(float)
+    df['Low'] = df['Low'].astype(float)
     df['SMA_20'] = df['Close'].rolling(window=20).mean(); df['STD_20'] = df['Close'].rolling(window=20).std()
     df['Upper_BB'] = df['SMA_20'] + (df['STD_20'] * 2); df['Lower_BB'] = df['SMA_20'] - (df['STD_20'] * 2)
     delta = df['Close'].diff()
@@ -483,44 +485,125 @@ def calculate_signals(df):
     df['Vol_SMA_20'] = df['Volume'].rolling(window=20).mean()
     df['Max_20'] = df['Close'].rolling(20).max().shift(1); df['Min_20'] = df['Close'].rolling(20).min().shift(1)
 
+    # ATR 14 Calculation
+    df['TR'] = pd.concat([
+        df['High'] - df['Low'],
+        (df['High'] - df['Close'].shift(1)).abs(),
+        (df['Low'] - df['Close'].shift(1)).abs()
+    ], axis=1).max(axis=1)
+    df['ATR_14'] = df['TR'].rolling(window=14).mean()
+
     latest, prev = df.iloc[-1], df.iloc[-2]
     signals = {}
     
+    # Strategy 1: Mean Reversion
     if latest['Close'] < latest['Lower_BB'] and latest['RSI_14'] < 30: signals['Mean Reversion'] = "LONG 🟢"
     elif latest['Close'] > latest['Upper_BB'] and latest['RSI_14'] > 70: signals['Mean Reversion'] = "SHORT 🔴"
 
+    # Strategy 2: Trend Following
     if latest['EMA_9'] > latest['EMA_21'] and prev['EMA_9'] <= prev['EMA_21'] and latest['MACD'] > latest['Signal_Line']: signals['Trend Following'] = "LONG 🟢"
     elif latest['EMA_9'] < latest['EMA_21'] and prev['EMA_9'] >= prev['EMA_21'] and latest['MACD'] < latest['Signal_Line']: signals['Trend Following'] = "SHORT 🔴"
 
+    # Strategy 3: Volume Breakout
     if latest['Volume'] > (2 * latest['Vol_SMA_20']) and latest['Vol_SMA_20'] > 0:
         if latest['Close'] > prev['Close'] and latest['Close'] > latest['Max_20']: signals['Volume Breakout'] = "LONG 🟢"
         elif latest['Close'] < prev['Close'] and latest['Close'] < latest['Min_20']: signals['Volume Breakout'] = "SHORT 🔴"
 
-    return signals, latest['Close']
+    # Strategy 4: RSI Divergence
+    if len(df) >= 40:
+        window = 10
+        current_w = df.iloc[-window:]
+        previous_w = df.iloc[-(window * 2):-window]
+        if len(previous_w) >= window:
+            cur_low_idx = current_w['Close'].idxmin()
+            prev_low_idx = previous_w['Close'].idxmin()
+            cur_high_idx = current_w['Close'].idxmax()
+            prev_high_idx = previous_w['Close'].idxmax()
+            # Bullish Divergence: Price Lower Low + RSI Higher Low
+            if current_w['Close'].min() < previous_w['Close'].min():
+                if df.loc[cur_low_idx, 'RSI_14'] > df.loc[prev_low_idx, 'RSI_14']:
+                    signals['RSI Divergence'] = "LONG 🟢"
+            # Bearish Divergence: Price Higher High + RSI Lower High
+            if current_w['Close'].max() > previous_w['Close'].max():
+                if df.loc[cur_high_idx, 'RSI_14'] < df.loc[prev_high_idx, 'RSI_14']:
+                    signals['RSI Divergence'] = "SHORT 🔴"
 
-def process_coin_scan(exchange, symbol, tf, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct):
-    df_scan = fetch_data_from_exchange(exchange, symbol, tf, limit=100)
-    if df_scan is None or len(df_scan) < 50: return []
-        
-    signals_found, entry = calculate_signals(df_scan)
-    if not signals_found: return []
+    atr_val = float(latest['ATR_14']) if pd.notna(latest['ATR_14']) else 0.0
+    rsi_val = float(latest['RSI_14']) if pd.notna(latest['RSI_14']) else 50.0
+    return signals, latest['Close'], atr_val, rsi_val
+
+def calculate_mtf_confluence(exchange, symbol):
+    """Vote sinyal dari 3 timeframe. Return (direction, score, details, atr, rsi)"""
+    timeframes = ['5m', '15m', '1H']
+    long_votes, short_votes = 0, 0
+    tf_details = {}
+    latest_atr, latest_rsi, latest_entry = 0.0, 50.0, 0.0
+    all_signals = {}
+
+    for tf in timeframes:
+        df = fetch_data_from_exchange(exchange, symbol, tf, limit=100)
+        if df is None or len(df) < 50:
+            tf_details[tf] = {}
+            continue
+        signals, entry, atr_val, rsi_val = calculate_signals(df)
+        tf_sigs = {}
+        for strat, sig in signals.items():
+            if 'LONG' in sig: long_votes += 1; tf_sigs[strat] = 'LONG'
+            elif 'SHORT' in sig: short_votes += 1; tf_sigs[strat] = 'SHORT'
+        tf_details[tf] = tf_sigs
+        latest_atr, latest_rsi, latest_entry = atr_val, rsi_val, entry
+        all_signals.update(signals)
+
+    if long_votes >= 2:
+        return 'LONG', long_votes, tf_details, latest_atr, latest_rsi, latest_entry, all_signals
+    elif short_votes >= 2:
+        return 'SHORT', short_votes, tf_details, latest_atr, latest_rsi, latest_entry, all_signals
+    return None, max(long_votes, short_votes), tf_details, latest_atr, latest_rsi, latest_entry, all_signals
+
+def process_coin_scan(exchange, symbol, tf, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct, sl_tp_source='Fixed %', atr_sl_mult=1.5, atr_tp_mult=3.0, use_mtf=False):
+    # === Multi-Timeframe Confluence Filter ===
+    confluence_score = 0
+    if use_mtf:
+        direction, score, tf_details, mtf_atr, mtf_rsi, mtf_entry, mtf_signals = calculate_mtf_confluence(exchange, symbol)
+        if direction is None or score < 2:
+            return []  # Skip: tidak cukup konfluensi
+        confluence_score = score
+        # Gunakan sinyal dari MTF
+        entry = mtf_entry
+        atr_val = mtf_atr
+        rsi_val = mtf_rsi
+        # Filter sinyal: hanya yang sesuai arah MTF
+        signals_found = {k: v for k, v in mtf_signals.items() if direction.upper() in v}
+        if not signals_found:
+            return []
+    else:
+        df_scan = fetch_data_from_exchange(exchange, symbol, tf, limit=100)
+        if df_scan is None or len(df_scan) < 50: return []
+        signals_found, entry, atr_val, rsi_val = calculate_signals(df_scan)
+        if not signals_found: return []
     
     results = []
     for strat, signal in signals_found.items():
         res_dict = {
             "Exchange": exchange, "Koin": symbol, "Strategi": strat, "Sinyal": signal,
-            "Entry": float(f"{entry:.5f}")
+            "Entry": float(f"{entry:.5f}"), "ATR": float(f"{atr_val:.5f}"), "RSI": float(f"{rsi_val:.1f}")
         }
-        if tp_mode == "Statis":
+        if confluence_score > 0:
+            res_dict["Confluence"] = confluence_score
+
+        if sl_tp_source == "ATR" and atr_val > 0:
+            # ATR Dynamic SL/TP
+            sl = entry - (atr_val * atr_sl_mult) if "LONG" in signal else entry + (atr_val * atr_sl_mult)
+            tp = entry + (atr_val * atr_tp_mult) if "LONG" in signal else entry - (atr_val * atr_tp_mult)
+            res_dict.update({"SL": float(f"{sl:.5f}"), "Harga TP": float(f"{tp:.5f}")})
+        elif tp_mode == "Statis":
             sl = entry * (1 - (sl_pct / 100)) if "LONG" in signal else entry * (1 + (sl_pct / 100))
             tp = entry * (1 + (tp_pct / 100)) if "LONG" in signal else entry * (1 - (tp_pct / 100))
             res_dict.update({"SL": float(f"{sl:.5f}"), "Harga TP": float(f"{tp:.5f}")})
-            tp_msg = f"*TP:* {tp:.5f}"
         else:
             sl = entry * (1 - (sl_pct / 100)) if "LONG" in signal else entry * (1 + (sl_pct / 100))
             tsl = entry * (1 + (tsl_act_pct / 100)) if "LONG" in signal else entry * (1 - (tsl_act_pct / 100))
             res_dict.update({"SL": float(f"{sl:.5f}"), "TSL Trigger": float(f"{tsl:.5f}"), "Step Area": float(f"{tsl_step_pct:.2f}")})
-            tp_msg = f"*TSL Trigger:* {tsl:.5f}\n*Step Area:* {tsl_step_pct}%"
             
         results.append(res_dict)
     return results
@@ -584,6 +667,20 @@ def run_strategy_backtest(df, strategy, tp_mode, sl_pct, tp_pct, tsl_act_pct, ts
                 if df.loc[i, 'Volume'] > (2 * df.loc[i, 'Vol_SMA_20']) and df.loc[i, 'Vol_SMA_20'] > 0:
                     if c > df.loc[i-1, 'Close'] and c > df.loc[i, 'Max_20']: sig = 'LONG'
                     elif c < df.loc[i-1, 'Close'] and c < df.loc[i, 'Min_20']: sig = 'SHORT'
+            elif strategy == 'RSI Divergence':
+                if i >= 40:
+                    window = 10
+                    current_w = df.iloc[i-window+1:i+1]
+                    previous_w = df.iloc[i-(window*2)+1:i-window+1]
+                    if len(previous_w) >= window and len(current_w) >= window:
+                        cur_low_idx = current_w['Close'].idxmin()
+                        prev_low_idx = previous_w['Close'].idxmin()
+                        cur_high_idx = current_w['Close'].idxmax()
+                        prev_high_idx = previous_w['Close'].idxmax()
+                        if current_w['Close'].min() < previous_w['Close'].min():
+                            if df.loc[cur_low_idx, 'RSI_14'] > df.loc[prev_low_idx, 'RSI_14']: sig = 'LONG'
+                        if current_w['Close'].max() > previous_w['Close'].max():
+                            if df.loc[cur_high_idx, 'RSI_14'] < df.loc[prev_high_idx, 'RSI_14']: sig = 'SHORT'
             if sig == 'LONG':
                 pos_type = 'LONG'; pos_size = capital / c; entry_price = c; capital = 0.0; tsl_active = False
                 sl_price = c * (1 - (sl_pct / 100)); tp_price = c * (1 + (tp_pct / 100))
@@ -659,13 +756,29 @@ def scan_arbitrage():
 # ================= UI HELPER: SIGNAL CARDS =================
 def render_signal_card(data, is_live, api_key, api_secret, tp_mode, index):
     wr_str = f" | WR: {data['Win Rate (%)']:.1f}%" if 'Win Rate (%)' in data else ""
-    with st.expander(f"⚡ {data['Sinyal']} | {data['Koin']} ({data['Exchange']}){wr_str}", expanded=False):
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Entry", f"{data['Entry']:.5f}")
-        c2.metric("Stop Loss", f"{data['SL']:.5f}")
-        target_val = data.get('Target/TSL', data.get('Harga TP', data.get('TSL Trigger', 0)))
-        c3.metric("Target/TSL" if tp_mode == "Trailing Stop" else "Take Profit", f"{target_val:.5f}")
-        if 'Win Rate (%)' in data: c4.metric("Win Rate", f"{data['Win Rate (%)']:.1f}%")
+    conf_str = ""
+    if 'Confluence' in data:
+        score = data['Confluence']
+        if score >= 3: conf_str = " | 🎯 Triple Confluence"
+        elif score == 2: conf_str = " | ⚡ Double Confluence"
+        
+    with st.expander(f"⚡ {data['Sinyal']} | {data['Koin']} ({data['Exchange']}){wr_str}{conf_str}", expanded=False):
+        has_wr = 'Win Rate (%)' in data
+        if has_wr:
+            cols = st.columns(5)
+            cols[0].metric("Entry", f"{data['Entry']:.5f}")
+            cols[1].metric("Stop Loss", f"{data['SL']:.5f}")
+            target_val = data.get('Target/TSL', data.get('Harga TP', data.get('TSL Trigger', 0)))
+            cols[2].metric("Target/TSL" if tp_mode == "Trailing Stop" else "Take Profit", f"{target_val:.5f}")
+            cols[3].metric("ATR", f"{data.get('ATR', 0.0):.5f}")
+            cols[4].metric("Win Rate", f"{data['Win Rate (%)']:.1f}%")
+        else:
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Entry", f"{data['Entry']:.5f}")
+            c2.metric("Stop Loss", f"{data['SL']:.5f}")
+            target_val = data.get('Target/TSL', data.get('Harga TP', data.get('TSL Trigger', 0)))
+            c3.metric("Target/TSL" if tp_mode == "Trailing Stop" else "Take Profit", f"{target_val:.5f}")
+            if 'ATR' in data: c4.metric(f"ATR (RSI: {data.get('RSI', 0):.1f})", f"{data['ATR']:.5f}")
         
         st.markdown("---")
         cc1, cc2 = st.columns([1, 2])
@@ -829,16 +942,25 @@ timeframe = st.sidebar.selectbox("Timeframe", ["5m", "15m", "1H"])
 skala_scanner = st.sidebar.selectbox("Kapasitas Koin", [20, 50])
 
 st.sidebar.markdown("### 🎯 Profit Engine Mode")
-tp_mode = st.sidebar.radio("Mode Eksekusi Target:", ["Statis", "Trailing Stop"])
-sl_pct = st.sidebar.number_input("🔴 Stop Loss (%)", value=2.0, step=0.1)
+tp_mode = st.sidebar.radio("Mode Eksekusi Target:", ["Statis", "Trailing Stop", "ATR Dynamic SL/TP"])
+sl_pct, tp_pct, tsl_act_pct, tsl_step_pct = 0.0, 0.0, 0.0, 0.0
+atr_sl_mult, atr_tp_mult = 1.5, 3.0
+sl_tp_source = "Fixed %"
 
 if tp_mode == "Statis":
+    sl_pct = st.sidebar.number_input("🔴 Stop Loss (%)", value=2.0, step=0.1)
     tp_pct = st.sidebar.number_input("🟢 Target TP (%)", value=6.0, step=0.1)
-    tsl_act_pct, tsl_step_pct = 0.0, 0.0
-else:
-    tp_pct = 0.0
+elif tp_mode == "Trailing Stop":
+    sl_pct = st.sidebar.number_input("🔴 Stop Loss (%)", value=2.0, step=0.1)
     tsl_act_pct = st.sidebar.number_input("🟢 Trailing Activation (%)", value=4.0, step=0.1)
     tsl_step_pct = st.sidebar.number_input("🔄 Trailing Step (%)", value=1.0, step=0.1)
+else:
+    sl_tp_source = "ATR"
+    atr_sl_mult = st.sidebar.number_input("🔴 ATR SL Multiplier", value=1.5, step=0.1)
+    atr_tp_mult = st.sidebar.number_input("🟢 ATR TP Multiplier", value=3.0, step=0.1)
+
+st.sidebar.markdown("### 🧠 Sniper Intelligence")
+use_mtf = st.sidebar.toggle("🔗 Multi-Timeframe Confluence (MTF)", value=True, help="Hanya eksekusi jika minimal 2 dari 3 Timeframe (5m, 15m, 1H) setuju arah yang sama.")
 
 st.sidebar.write("---")
 if st.sidebar.button("🚀 EXECUTE MULTI-STRATEGY SCAN", use_container_width=True, type="primary"):
@@ -849,7 +971,7 @@ if st.sidebar.button("🚀 EXECUTE MULTI-STRATEGY SCAN", use_container_width=Tru
         temp_results = []
         progress_bar = st.sidebar.progress(0)
         with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
-            futures = {executor.submit(process_coin_scan, t[0], t[1], timeframe, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct): t for t in target_tasks}
+            futures = {executor.submit(process_coin_scan, t[0], t[1], timeframe, tp_mode, sl_pct, tp_pct, tsl_act_pct, tsl_step_pct, sl_tp_source, atr_sl_mult, atr_tp_mult, use_mtf): t for t in target_tasks}
             for i, future in enumerate(concurrent.futures.as_completed(futures)):
                 if len(target_tasks) > 0: progress_bar.progress((i + 1) / len(target_tasks))
                 try: 
@@ -861,7 +983,7 @@ if st.sidebar.button("🚀 EXECUTE MULTI-STRATEGY SCAN", use_container_width=Tru
         st.sidebar.success(f"Scan selesai! {len(temp_results)} sinyal.")
 
 # ================= TAB NAVIGATION =================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["🏆 Conviction Picks", "🎯 Mean Reversion", "🚀 Trend Follow", "💥 Breakout", "📊 Backtester", "📺 Live Macro", "📆 Calendar", "⚖️ Arbitrage"])
+tab1, tab2, tab3, tab4, tab_div, tab5, tab6, tab7, tab8 = st.tabs(["🏆 Conviction Picks", "🎯 Mean Reversion", "🚀 Trend Follow", "💥 Breakout", "📉 Divergence", "📊 Backtester", "📺 Live Macro", "📆 Calendar", "⚖️ Arbitrage"])
 
 df_all = pd.DataFrame(st.session_state.scan_results)
 
@@ -876,6 +998,7 @@ def render_strategy_tab(strategy_name):
 with tab2: render_strategy_tab('Mean Reversion')
 with tab3: render_strategy_tab('Trend Following')
 with tab4: render_strategy_tab('Volume Breakout')
+with tab_div: render_strategy_tab('RSI Divergence')
 
 with tab1:
     st.markdown("## 🏆 Top Conviction Picks")
@@ -928,7 +1051,7 @@ with tab5:
     st.subheader("📊 Manual Backtester Engine")
     if not df_all.empty and 'Exchange' in df_all.columns:
         pilihan = st.selectbox("Pilih Koin:", (df_all['Exchange'] + " - " + df_all['Koin']).unique())
-        strat_pilih = st.selectbox("Pilih Strategi:", ["Mean Reversion", "Trend Following", "Volume Breakout"])
+        strat_pilih = st.selectbox("Pilih Strategi:", ["Mean Reversion", "Trend Following", "Volume Breakout", "RSI Divergence"])
         if st.button("🧪 JALANKAN MANUAL BACKTEST"):
             ex_terpilih, koin_terpilih = pilihan.split(" - ", 1)
             with st.spinner("Menarik data 1 Tahun..."):
