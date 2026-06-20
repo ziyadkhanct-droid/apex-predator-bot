@@ -59,10 +59,15 @@ def apply_theme(theme_name):
         background-color: {bg_sidebar} !important;
     }}
 
-    /* Target SEMUA Teks Global (Markdown, Label, Headers) */
-    p, span, h1, h2, h3, h4, h5, h6, label, div[data-testid="stMarkdownContainer"] p {{
+    /* Target SEMUA Teks Global (Markdown, Label, Headers) — KECUALI ikon */
+    p, h1, h2, h3, h4, h5, h6, label, div[data-testid="stMarkdownContainer"] p {{
         color: {text_color} !important;
         font-family: {font_fam} !important;
+        {text_shadow}
+    }}
+    /* Teks span biasa (bukan ikon Material) */
+    span:not([data-testid="stExpanderToggleIcon"]) {{
+        color: {text_color} !important;
         {text_shadow}
     }}
 
@@ -107,6 +112,29 @@ def apply_theme(theme_name):
         white-space: normal !important;
     }}
 
+    /* ===== FIX EXPANDER ICON (keyboard_arrow_right bug) ===== */
+    /* Sembunyikan teks fallback ikon Material dan ganti dengan panah CSS */
+    div[data-testid="stExpander"] details > summary > span:first-child {{
+        font-size: 0px !important;
+        width: 20px !important;
+        height: 20px !important;
+        min-width: 20px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+    }}
+    div[data-testid="stExpander"] details > summary > span:first-child::before {{
+        content: '▶' !important;
+        font-size: 12px !important;
+        font-family: sans-serif !important;
+        color: {text_color} !important;
+        transition: transform 0.2s ease !important;
+    }}
+    div[data-testid="stExpander"] details[open] > summary > span:first-child::before {{
+        content: '▼' !important;
+    }}
+
     /* ===== FIX EXPANDER HEADER (Teks saling timpa) ===== */
     div[data-testid="stExpander"] details > summary {{
         white-space: normal !important;
@@ -119,15 +147,15 @@ def apply_theme(theme_name):
         align-items: center !important;
         gap: 8px !important;
     }}
-    div[data-testid="stExpander"] details > summary span,
+    div[data-testid="stExpander"] details > summary > div,
     div[data-testid="stExpander"] details > summary p {{
         white-space: normal !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
         overflow: visible !important;
         text-overflow: unset !important;
-        display: inline !important;
         font-size: 0.95rem !important;
+        flex: 1 !important;
     }}
     div[data-testid="stExpander"] {{
         border-radius: 12px !important;
