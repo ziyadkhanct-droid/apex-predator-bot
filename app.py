@@ -103,32 +103,72 @@ def apply_theme(theme_name):
     /* Memaksa teks panjang turun ke baris baru (Anti-Overlap) */
     p, span, div, label {{
         word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
         white-space: normal !important;
+    }}
+
+    /* ===== FIX EXPANDER HEADER (Teks saling timpa) ===== */
+    div[data-testid="stExpander"] details > summary {{
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        line-height: 1.5 !important;
+        padding: 12px 16px !important;
+        min-height: 48px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }}
+    div[data-testid="stExpander"] details > summary span,
+    div[data-testid="stExpander"] details > summary p {{
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+        display: inline !important;
+        font-size: 0.95rem !important;
+    }}
+    div[data-testid="stExpander"] {{
+        border-radius: 12px !important;
+        overflow: visible !important;
+        margin-bottom: 10px !important;
     }}
 
     /* Memberi jarak aman pada setiap kolom Streamlit */
     [data-testid="column"] {{
-        padding: 0 10px !important;
-        margin-bottom: 15px !important;
+        padding: 0 8px !important;
+        margin-bottom: 12px !important;
+        overflow: visible !important;
     }}
 
     /* Memperbaiki ukuran font dan jarak pada Metric Cards agar tidak meluber */
     [data-testid="stMetricValue"] {{
-        font-size: 1.8rem !important; /* Perkecil sedikit agar muat di layar kecil */
-        line-height: 1.2 !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
+        font-size: 1.6rem !important;
+        line-height: 1.3 !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
     }}
     [data-testid="stMetricLabel"] {{
-        font-size: 0.9rem !important;
+        font-size: 0.85rem !important;
         word-wrap: break-word !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        line-height: 1.3 !important;
+    }}
+    [data-testid="stMetric"] {{
+        padding: 10px 12px !important;
+        border-radius: 12px !important;
+        overflow: visible !important;
     }}
 
     /* Memperbaiki jarak tombol di dalam kolom */
     .stButton > button {{
-        width: 100% !important; /* Tombol otomatis selebar kolom */
+        width: 100% !important;
         margin-top: 5px !important;
-        white-space: normal !important; /* Jika teks tombol panjang, turun ke bawah */
+        white-space: normal !important;
         height: auto !important;
         padding: 10px !important;
     }}
@@ -149,21 +189,38 @@ def apply_theme(theme_name):
     @media (max-width: 768px) {
         /* Perkecil font global untuk HP */
         html, body, p, span, div, label {
-            font-size: 14px !important;
+            font-size: 13px !important;
         }
         
         /* Perkecil judul dan header */
-        h1 { font-size: 1.5rem !important; }
-        h2 { font-size: 1.2rem !important; }
-        h3 { font-size: 1.1rem !important; }
+        h1 { font-size: 1.3rem !important; }
+        h2 { font-size: 1.1rem !important; }
+        h3 { font-size: 1.0rem !important; }
 
         /* Metrik (Angka besar) harus dikecilkan agar tidak tertindih */
         [data-testid="stMetricValue"] {
-            font-size: 1.4rem !important;
+            font-size: 1.2rem !important;
+            line-height: 1.3 !important;
         }
         [data-testid="stMetricLabel"] {
-            font-size: 0.8rem !important;
+            font-size: 0.7rem !important;
             white-space: normal !important;
+            line-height: 1.2 !important;
+        }
+        [data-testid="stMetric"] {
+            padding: 8px 6px !important;
+        }
+
+        /* Expander Header di HP - KRITIS */
+        div[data-testid="stExpander"] details > summary {
+            padding: 10px 8px !important;
+            font-size: 13px !important;
+            line-height: 1.4 !important;
+        }
+        div[data-testid="stExpander"] details > summary span,
+        div[data-testid="stExpander"] details > summary p {
+            font-size: 12px !important;
+            line-height: 1.3 !important;
         }
 
         /* Tabel / Dataframe HARUS bisa di-scroll ke samping (horizontal scroll) */
@@ -175,13 +232,13 @@ def apply_theme(theme_name):
         /* Buat tombol lebih nyaman ditekan dengan jempol (Touch Target) */
         .stButton > button {
             padding: 12px 10px !important;
-            font-size: 16px !important;
+            font-size: 14px !important;
             font-weight: bold !important;
         }
 
         /* Hilangkan padding berlebih di pinggir layar HP */
         .stApp {
-            padding: 1rem 0.5rem !important;
+            padding: 0.5rem 0.3rem !important;
         }
 
         /* 1. Paksa semua teks turun ke baris baru jika mentok (Jangan ditimpa) */
@@ -192,7 +249,7 @@ def apply_theme(theme_name):
             line-height: 1.4 !important;
         }
 
-        /* 2. Perbaikan khusus untuk Checkbox, Toggle, dan Radio Button (Tulisan "Allow") */
+        /* 2. Perbaikan khusus untuk Checkbox, Toggle, dan Radio Button */
         div[data-testid="stCheckbox"] label, 
         div[data-testid="stToggle"] label, 
         div[data-testid="stRadio"] label {
@@ -204,12 +261,21 @@ def apply_theme(theme_name):
 
         /* 3. Beri jarak (Padding) ekstra di dalam form API dan Kartu Sinyal */
         div[data-testid="stForm"] {
-            padding: 15px 10px !important;
+            padding: 12px 8px !important;
         }
         
-        /* 4. Pastikan kolom tidak dipaksa bersebelahan jika terlalu sempit */
+        /* 4. Kolom HP: stack vertikal jika terlalu sempit */
         [data-testid="column"] {
-            min-width: 100px !important; /* Mencegah kolom terlalu tipis */
+            min-width: 100% !important;
+            flex: 1 1 100% !important;
+            padding: 0 4px !important;
+            margin-bottom: 8px !important;
+        }
+
+        /* 5. Tab navigation di HP */
+        .stTabs [data-baseweb="tab"] {
+            font-size: 11px !important;
+            padding: 6px 8px !important;
         }
     }
     """
