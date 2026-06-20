@@ -7,6 +7,7 @@ import json
 import os
 import datetime as dt
 import ccxt
+import streamlit.components.v1 as components
 
 # ================= KONFIGURASI & THEME ENGINE =================
 st.set_page_config(layout="wide", page_title="Apex Predator Institutional", page_icon="🏴‍☠️")
@@ -214,6 +215,48 @@ def apply_theme(theme_name):
     """
 
     css += "\n</style>"
+
+    if theme_name == "Apex Institutional (Dark)":
+        premium_css = """
+        <style>
+        /* Background Utama Gelap Murni LuxAlgo */
+        .stApp, .css-1d391kg, .css-18e3th9 {
+            background: linear-gradient(180deg, #0A0D14 0%, #050608 100%) !important;
+        }
+        
+        /* Glassmorphism pada Kontainer dan Expander */
+        [data-testid="stMetric"], div[data-testid="stExpander"], div[data-testid="stForm"] {
+            background: rgba(18, 22, 31, 0.6) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(0, 255, 204, 0.15) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5) !important;
+        }
+
+        /* Border Radius Global & Halus */
+        input, select, .stSelectbox div[data-baseweb="select"] > div {
+            border-radius: 8px !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+
+        /* Efek Tombol Neon */
+        .stButton > button {
+            border-radius: 8px !important;
+            transition: all 0.3s ease-in-out !important;
+            border: 1px solid transparent !important;
+        }
+        
+        /* Neon Glow saat Hover */
+        .stButton > button:hover {
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.6) !important;
+            border: 1px solid #00ffcc !important;
+            transform: translateY(-2px);
+        }
+        </style>
+        """
+        st.markdown(premium_css, unsafe_allow_html=True)
+
     st.markdown(css, unsafe_allow_html=True)
 
 # Injeksi tema sesegera mungkin
@@ -555,8 +598,49 @@ def render_signal_card(data, is_live, api_key, api_secret, tp_mode, index):
                     if success: st.success(msg)
                     else: st.error(msg)
 
+# ================= TRADINGVIEW INTEGRATION =================
+def render_tradingview_chart(symbol):
+    tv_symbol = f"BINANCE:{symbol}.P" if "USDT" in symbol else f"BINANCE:{symbol}"
+    html_code = f"""
+    <div class="tradingview-widget-container" style="height: 500px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+      <div id="tradingview_{symbol}" style="height: 100%; width: 100%;"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget(
+      {{
+      "autosize": true,
+      "symbol": "{tv_symbol}",
+      "interval": "15",
+      "timezone": "Etc/UTC",
+      "theme": "dark",
+      "style": "1",
+      "locale": "en",
+      "enable_publishing": false,
+      "backgroundColor": "rgba(10, 13, 20, 1)",
+      "gridColor": "rgba(255, 255, 255, 0.06)",
+      "hide_top_toolbar": false,
+      "hide_legend": false,
+      "save_image": false,
+      "container_id": "tradingview_{symbol}",
+      "studies": [
+        "Volume@tv-basicstudies"
+      ]
+    }}
+      );
+      </script>
+    </div>
+    """
+    components.html(html_code, height=500)
+
 # ================= APP START =================
 st.markdown("<h1 style='text-align: center;'>🏴‍☠️ THE APEX PREDATOR TERMINAL</h1>", unsafe_allow_html=True)
+
+st.markdown("---")
+col_tv1, col_tv2 = st.columns([1, 4])
+with col_tv1:
+    tv_coin = st.selectbox("📊 Live Chart (TradingView):", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"])
+render_tradingview_chart(tv_coin)
+st.markdown("---")
 
 if 'scan_results' not in st.session_state: st.session_state.scan_results = []
 if 'conviction_picks' not in st.session_state: st.session_state.conviction_picks = []
