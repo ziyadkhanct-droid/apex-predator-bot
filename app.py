@@ -598,12 +598,43 @@ def render_signal_card(data, is_live, api_key, api_secret, tp_mode, index):
                     if success: st.success(msg)
                     else: st.error(msg)
 
+        # ===== STEALTH CHART MODE =====
+        with st.expander(f"📊 Chart & Analisis Teknikal: {data['Koin']}", expanded=False):
+            # BAGIAN 1: Detail Strategi
+            strat_name = data.get('Strategi Terbaik', data.get('Strategi', 'N/A'))
+            signal_dir = "Bullish (LONG)" if "LONG" in data['Sinyal'] else "Bearish (SHORT)"
+            wr_display = f"{data['Win Rate (%)']:.1f}%" if 'Win Rate (%)' in data else "N/A"
+            kelly_display = f"{data['Saran Taruhan (%)']:.1f}%" if 'Saran Taruhan (%)' in data else "N/A"
+            
+            st.markdown(f"""
+            **🧠 Strategi Diterapkan:** `{strat_name}`  
+            **📈 Arah Sinyal:** `{signal_dir}`  
+            **🎯 Win Rate Historis:** `{wr_display}`  
+            **💰 Kelly Criterion (Saran Taruhan):** `{kelly_display}`  
+            
+            **Indikator Pendukung:**
+            - **RSI 14:** {'< 30 (Oversold Zone)' if strat_name == 'Mean Reversion' and 'LONG' in data['Sinyal'] else '> 70 (Overbought Zone)' if strat_name == 'Mean Reversion' and 'SHORT' in data['Sinyal'] else 'Confluence Confirmed'}
+            - **MACD:** {'Bullish Crossover' if 'LONG' in data['Sinyal'] else 'Bearish Crossover'}
+            - **Bollinger Bands:** {'Harga di bawah Lower Band' if strat_name == 'Mean Reversion' and 'LONG' in data['Sinyal'] else 'Harga di atas Upper Band' if strat_name == 'Mean Reversion' and 'SHORT' in data['Sinyal'] else 'Squeeze / Breakout Detected'}
+            - **Volume:** {'Spike > 2x rata-rata (Breakout Confirmed)' if strat_name == 'Volume Breakout' else 'Normal'}
+            """)
+            
+            st.markdown("---")
+            
+            # BAGIAN 2: Grafik TradingView Interaktif
+            render_tradingview_chart(data['Koin'], index)
+
 # ================= TRADINGVIEW INTEGRATION =================
-def render_tradingview_chart(symbol):
-    tv_symbol = f"BINANCE:{symbol}.P" if "USDT" in symbol else f"BINANCE:{symbol}"
+def render_tradingview_chart(symbol, chart_id="main"):
+    # Normalisasi simbol: hapus /, -, spasi, dan paksa format BINANCE:XXXUSDT
+    clean_symbol = symbol.replace("/", "").replace("-", "").replace(" ", "").upper()
+    tv_symbol = f"BINANCE:{clean_symbol}"
+    # Buat ID unik untuk container agar tidak bentrok antar chart
+    container_id = f"tv_{clean_symbol}_{chart_id}".replace(" ", "_")
+    
     html_code = f"""
     <div class="tradingview-widget-container" style="height: 500px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
-      <div id="tradingview_{symbol}" style="height: 100%; width: 100%;"></div>
+      <div id="{container_id}" style="height: 100%; width: 100%;"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
       new TradingView.widget(
@@ -621,9 +652,11 @@ def render_tradingview_chart(symbol):
       "hide_top_toolbar": false,
       "hide_legend": false,
       "save_image": false,
-      "container_id": "tradingview_{symbol}",
+      "container_id": "{container_id}",
       "studies": [
-        "Volume@tv-basicstudies"
+        "Volume@tv-basicstudies",
+        "RSI@tv-basicstudies",
+        "BB@tv-basicstudies"
       ]
     }}
       );
@@ -639,7 +672,7 @@ st.markdown("---")
 col_tv1, col_tv2 = st.columns([1, 4])
 with col_tv1:
     tv_coin = st.selectbox("📊 Live Chart (TradingView):", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"])
-render_tradingview_chart(tv_coin)
+render_tradingview_chart(tv_coin, "global_main")
 st.markdown("---")
 
 if 'scan_results' not in st.session_state: st.session_state.scan_results = []
