@@ -668,13 +668,6 @@ def render_tradingview_chart(symbol, chart_id="main"):
 # ================= APP START =================
 st.markdown("<h1 style='text-align: center;'>🏴‍☠️ THE APEX PREDATOR TERMINAL</h1>", unsafe_allow_html=True)
 
-st.markdown("---")
-col_tv1, col_tv2 = st.columns([1, 4])
-with col_tv1:
-    tv_coin = st.selectbox("📊 Live Chart (TradingView):", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"])
-render_tradingview_chart(tv_coin, "global_main")
-st.markdown("---")
-
 if 'scan_results' not in st.session_state: st.session_state.scan_results = []
 if 'conviction_picks' not in st.session_state: st.session_state.conviction_picks = []
 if 'active_trades' not in st.session_state: st.session_state.active_trades = []
