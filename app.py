@@ -182,6 +182,34 @@ def apply_theme(theme_name):
         .stApp {
             padding: 1rem 0.5rem !important;
         }
+
+        /* 1. Paksa semua teks turun ke baris baru jika mentok (Jangan ditimpa) */
+        p, span, label, div.stMarkdown, div.stText, h1, h2, h3 {
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 2. Perbaikan khusus untuk Checkbox, Toggle, dan Radio Button (Tulisan "Allow") */
+        div[data-testid="stCheckbox"] label, 
+        div[data-testid="stToggle"] label, 
+        div[data-testid="stRadio"] label {
+            white-space: normal !important;
+            display: inline-block !important;
+            width: 100% !important;
+            margin-bottom: 5px !important;
+        }
+
+        /* 3. Beri jarak (Padding) ekstra di dalam form API dan Kartu Sinyal */
+        div[data-testid="stForm"] {
+            padding: 15px 10px !important;
+        }
+        
+        /* 4. Pastikan kolom tidak dipaksa bersebelahan jika terlalu sempit */
+        [data-testid="column"] {
+            min-width: 100px !important; /* Mencegah kolom terlalu tipis */
+        }
     }
     """
 
