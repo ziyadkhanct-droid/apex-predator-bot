@@ -504,7 +504,7 @@ def scan_arbitrage():
     return pd.DataFrame(data).sort_values(by="Net Profit (%)", ascending=False)
 
 # ================= UI HELPER: SIGNAL CARDS =================
-def render_signal_card(data, is_live, api_key, api_secret, tp_mode):
+def render_signal_card(data, is_live, api_key, api_secret, tp_mode, index):
     wr_str = f" | WR: {data['Win Rate (%)']:.1f}%" if 'Win Rate (%)' in data else ""
     with st.expander(f"⚡ {data['Sinyal']} | {data['Koin']} ({data['Exchange']}){wr_str}", expanded=False):
         c1, c2, c3, c4 = st.columns(4)
@@ -517,11 +517,11 @@ def render_signal_card(data, is_live, api_key, api_secret, tp_mode):
         st.markdown("---")
         cc1, cc2 = st.columns([1, 2])
         strat_key = data.get('Strategi Terbaik', data.get('Strategi'))
-        with cc1: margin = st.number_input("Margin (USDT)", value=50.0, step=10.0, key=f"m_{strat_key}_{data['Koin']}")
+        with cc1: margin = st.number_input("Margin (USDT)", value=50.0, step=10.0, key=f"m_{strat_key}_{data['Koin']}_{index}")
         with cc2:
             st.write(""); st.write("")
             side = "buy" if "LONG" in data['Sinyal'] else "sell"
-            if st.button(f"{'🟢' if side=='buy' else '🔴'} EXECUTE {side.upper()} - {data['Koin']}", key=f"btn_{strat_key}_{data['Koin']}", use_container_width=True, disabled=not st.session_state.api_connected):
+            if st.button(f"{'🟢' if side=='buy' else '🔴'} EXECUTE {side.upper()} - {data['Koin']}", key=f"btn_{strat_key}_{data['Koin']}_{index}", use_container_width=True, disabled=not st.session_state.api_connected):
                 with st.spinner("Mengirim perintah eksekusi..."):
                     success, msg = execute_bracket_order(data['Exchange'], api_key, api_secret, data['Koin'], side, margin, data['SL'], target_val, is_live)
                     if success: st.success(msg)
@@ -656,7 +656,7 @@ def render_strategy_tab(strategy_name):
     if not df_all.empty and 'Strategi' in df_all.columns:
         sig_data = [row for row in st.session_state.scan_results if row['Strategi'] == strategy_name]
         if not sig_data: st.info("Belum ada sinyal.")
-        for data in sig_data: render_signal_card(data, live_mode, api_key_input, api_secret_input, tp_mode)
+        for idx, data in enumerate(sig_data): render_signal_card(data, live_mode, api_key_input, api_secret_input, tp_mode, f"sig_{strategy_name}_{idx}")
 
 with tab2: render_strategy_tab('Mean Reversion')
 with tab3: render_strategy_tab('Trend Following')
@@ -706,8 +706,8 @@ with tab1:
                 st.rerun() # Refresh untuk memunculkan log di sidebar
             
     if len(st.session_state.conviction_picks) > 0:
-        for data in sorted(st.session_state.conviction_picks, key=lambda x: x['Win Rate (%)'], reverse=True):
-            render_signal_card(data, live_mode, api_key_input, api_secret_input, tp_mode)
+        for idx, data in enumerate(sorted(st.session_state.conviction_picks, key=lambda x: x['Win Rate (%)'], reverse=True)):
+            render_signal_card(data, live_mode, api_key_input, api_secret_input, tp_mode, f"conv_{idx}")
 
 with tab5:
     st.subheader("📊 Manual Backtester Engine")
